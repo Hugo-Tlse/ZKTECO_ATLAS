@@ -2,38 +2,35 @@
 
 Projet de **reverse engineering, documentation et exploitation de l'API HTTP interne** des contrôleurs d'accès **ZKTeco TECO Atlas**.
 
-> ⚠️ **Projet non officiel** — ZKTeco ne semble pas fournir d'API publique documentée pour les contrôleurs Atlas. Les endpoints présentés ici ont été identifiés par analyse et expérimentation sur un contrôleur Atlas.
-
-L'objectif est de permettre l'extraction automatisée des données d'un contrôleur Atlas vers une base de données externe, notamment pour conserver l'historique des événements au-delà de la capacité de stockage du contrôleur.
+> ⚠️ **Projet non officiel**
+> ZKTeco ne fournit pas, à ma connaissance, de documentation publique complète de cette API. Les endpoints et structures présentés dans ce projet ont été identifiés par observation et expérimentation sur un contrôleur Atlas.
+L'objectif est de documenter les échanges HTTP avec les contrôleurs Atlas et de permettre l'extraction automatisée des utilisateurs, badges et événements vers une base de données externe.
 
 ---
 
 ## 🎯 Objectifs
 
-Le projet a actuellement plusieurs objectifs :
+Le projet a pour objectifs :
 
-* identifier et documenter les endpoints HTTP utilisés par l'Atlas ;
-* authentifier un client auprès du contrôleur ;
-* récupérer les utilisateurs et leurs badges ;
+* identifier les endpoints HTTP utilisés par les contrôleurs Atlas ;
+* documenter le mécanisme d'authentification ;
+* récupérer les utilisateurs et leurs credentials ;
 * récupérer les événements d'accès ;
-* comprendre les structures JSON retournées par l'Atlas ;
+* identifier la structure JSON retournée par l'API ;
 * documenter les codes et sous-codes d'événements ;
-* permettre une synchronisation régulière vers une base de données externe ;
-* éviter la perte d'historique lorsque la capacité maximale de stockage des événements est atteinte.
-
-### Capacité de stockage
-
-Les contrôleurs Atlas peuvent stocker jusqu'à **10 000 transactions**. Une extraction régulière vers une base de données externe permet donc de conserver un historique beaucoup plus important.
+* permettre une extraction automatisée des événements ;
+* mettre en place une synchronisation régulière vers une base de données externe ;
+* éviter la perte d'historique lorsque la capacité de stockage du contrôleur est atteinte.
 
 ---
 
 # 🏢 Matériel concerné
 
-Le développement a été réalisé principalement autour du :
+Le développement et les tests ont principalement été réalisés autour de la gamme :
 
 * **Atlas 400**
 
-La compatibilité avec les modèles suivants reste à confirmer :
+Les modèles suivants sont susceptibles d'utiliser une architecture similaire et restent à confirmer :
 
 * Atlas 100
 * Atlas 200
@@ -41,13 +38,38 @@ La compatibilité avec les modèles suivants reste à confirmer :
 * Atlas Bio 260
 * Atlas Bio 460
 
-> Les modèles partageant la même application Web/API pourraient être compatibles, mais cela doit être vérifié sur chaque firmware et chaque gamme de contrôleur.
+> La compatibilité peut dépendre du modèle, du firmware et de la version de l'application Web.
+
+---
+
+# 💾 Capacité de stockage
+
+Les contrôleurs Atlas étudiés peuvent stocker jusqu'à **10 000 transactions**.
+
+L'objectif du projet est donc de récupérer régulièrement les événements afin de conserver un historique dans une base de données externe.
+
+```text
+┌─────────────────────┐
+│    ZKTeco Atlas     │
+│                     │
+│  Transactions       │
+│       ↓             │
+│  capacité limitée   │
+└──────────┬──────────┘
+           │
+           │ Extraction
+           ▼
+┌─────────────────────┐
+│ Base de données     │
+│ externe             │
+│                     │
+│ Historique complet  │
+└─────────────────────┘
+```
 
 ---
 
 # 🔌 API découverte
-
-L'Atlas expose une interface HTTP/HTTPS utilisée notamment par son interface Web.
 
 Les premiers endpoints identifiés sont :
 
@@ -65,7 +87,7 @@ ZKTeco Atlas
 ├── Authentication
 │   └── /authenticate
 │
-├── Users / Credential Holders
+├── Credential Holders
 │   └── /credHolder/list
 │
 └── Events
@@ -76,13 +98,15 @@ ZKTeco Atlas
 
 # 🔐 Authentication
 
-Endpoint :
+## `/authenticate`
 
-```http
-/authenticate
+L'endpoint `/authenticate` permet d'authentifier un utilisateur auprès du contrôleur.
+
+Une authentification réussie retourne un :
+
+```text
+sessionToken
 ```
-
-L'authentification permet d'obtenir un `sessionToken`.
 
 Ce token est ensuite utilisé pour les requêtes suivantes.
 
@@ -102,36 +126,45 @@ Client
   └── /evt/list
 ```
 
-Le mécanisme exact d'authentification et les paramètres utilisés sont documentés dans les scripts présents dans ce dépôt.
+Le mécanisme d'authentification et les paramètres utilisés sont actuellement implémentés dans les scripts PHP du projet.
 
 ---
 
-# 👤 Utilisateurs
+# 👤 Credential Holders / Utilisateurs
 
-Endpoint :
+## `/credHolder/list`
 
-```http
-/credHolder/list
-```
+Cet endpoint permet de récupérer les utilisateurs enregistrés dans le contrôleur ainsi que leurs credentials et leurs privilèges.
 
-Cet endpoint permet de récupérer la liste des utilisateurs / titulaires de credentials enregistrés dans l'Atlas.
-
-## Structure identifiée
-
-Les champs actuellement identifiés comprennent notamment :
+### Structure identifiée
 
 ```text
-user
+User
+│
 ├── unid
 ├── first
 ├── last
 ├── idNum
-├── creds
+│
+├── creds[]
 │   └── name
-└── privBindings
+│
+└── privBindings[]
 ```
 
-### Exemple d'accès aux données en PHP
+### Champs actuellement identifiés
+
+| Champ          | Description                              |
+| -------------- | ---------------------------------------- |
+| `unid`         | Identifiant interne du credential holder |
+| `first`        | Prénom                                   |
+| `last`         | Nom                                      |
+| `idNum`        | Numéro d'identification                  |
+| `creds`        | Liste des credentials associés           |
+| `creds[].name` | Nom / identifiant du credential          |
+| `privBindings` | Informations relatives aux privilèges    |
+
+Exemple d'accès aux données en PHP :
 
 ```php
 $user['unid'];
@@ -142,253 +175,264 @@ $user['creds'][0]['name'];
 $user['privBindings'];
 ```
 
-### Correspondance supposée
-
-| Champ          | Description                          |
-| -------------- | ------------------------------------ |
-| `unid`         | Identifiant interne de l'utilisateur |
-| `first`        | Prénom                               |
-| `last`         | Nom                                  |
-| `idNum`        | Numéro d'identification              |
-| `creds`        | Credentials associés à l'utilisateur |
-| `creds[].name` | Identifiant du badge / credential    |
-| `privBindings` | Privilèges ou droits associés        |
-
-> Cette documentation est basée sur les observations réalisées sur un contrôleur Atlas. Certains champs peuvent varier selon le modèle, le firmware ou la configuration.
+> La structure complète du JSON reste à documenter. Certains champs peuvent varier selon le modèle ou le firmware.
 
 ---
 
-# 🚪 Événements
+# 🚪 Events / Événements
 
-Endpoint :
+## `/evt/list`
 
-```http
-/evt/list
+L'endpoint `/evt/list` permet de récupérer les événements enregistrés par le contrôleur.
+
+La réponse contient notamment une liste d'événements :
+
+```text
+instanceList[]
 ```
 
-L'endpoint permet de récupérer les événements enregistrés par le contrôleur.
+Chaque événement identifié contient notamment les informations suivantes.
 
-L'API accepte notamment des paramètres permettant de limiter les événements selon une période temporelle.
+### Structure actuellement identifiée
 
-## Filtrage temporel
+```text
+Event
+│
+├── hwTime
+├── evtCode
+├── evtSubCode
+│
+├── evtCredHolderRef
+│   ├── first
+│   ├── last
+│   └── idNum
+│
+├── evtCredRef
+│   ├── credNum
+│   └── name
+│
+├── evtDevRef
+│   └── name
+│
+└── evtControllerRef
+    └── name
+```
+
+---
+
+# ⏱️ Filtrage temporel
+
+L'API permet de filtrer les événements selon une période.
 
 Les paramètres identifiés sont :
 
 ```text
 hwTimeRestriction
 │
+├── afterDate_year
+├── afterDate_month
+├── afterDate_day
+├── afterDate_hour
+│
 ├── beforeDate_year
 ├── beforeDate_month
 ├── beforeDate_day
 └── beforeDate_hour
-
-hwTimeRestriction
-│
-├── afterDate_year
-├── afterDate_month
-├── afterDate_day
-└── afterDate_hour
 ```
 
-Cela permet notamment de rechercher les événements compris dans une période donnée :
+Exemple conceptuel :
 
 ```text
 afterDate
-    ↓
-événements Atlas
-    ↓
-beforeDate
+    │
+    ▼
+┌──────────────────────┐
+│      /evt/list       │
+│                      │
+│   événements compris │
+│   dans la période    │
+│                      │
+└──────────┬───────────┘
+           │
+           ▼
+       beforeDate
 ```
 
-Cette fonctionnalité est particulièrement intéressante pour mettre en place une synchronisation incrémentale.
+Cette fonctionnalité permet d'effectuer des extractions limitées à une période donnée.
 
 ---
 
-# 🔄 Synchronisation
+# 🗂️ Catégories d'événements
 
-L'objectif à terme est de ne pas télécharger l'intégralité des transactions à chaque exécution.
-
-Une synchronisation pourrait fonctionner ainsi :
+L'API accepte également un paramètre :
 
 ```text
-┌────────────────────┐
-│ Base de données    │
-│ externe            │
-│                    │
-│ dernier événement  │
-└─────────┬──────────┘
-          │
-          │ timestamp
-          ▼
-┌────────────────────┐
-│ ZKTeco Atlas       │
-│                    │
-│ /evt/list          │
-│                    │
-│ afterDate = last   │
-└─────────┬──────────┘
-          │
-          │ nouveaux événements
-          ▼
-┌────────────────────┐
-│ Base de données    │
-│ externe            │
-└────────────────────┘
+evtCategoryRestriction.evtCategories
 ```
 
-Cette méthode permettrait notamment de limiter :
-
-* le volume des requêtes ;
-* le temps de synchronisation ;
-* le risque de perdre les transactions lorsque la capacité du contrôleur est atteinte.
-
----
-
-# 📊 Codes d'événements
-
-Une partie du travail consiste également à identifier les codes et sous-codes retournés par l'Atlas.
-
-Exemples actuellement identifiés :
-
-| Code    | Signification              |
-| ------- | -------------------------- |
-| `48.0`  | Accès autorisé             |
-| `49.0`  | Accès refusé               |
-| `49.1`  | Carte expirée              |
-| `49.2`  | Badge désactivé            |
-| `49.3`  | Tentative d'usurpation     |
-| `49.11` | En dehors de l'horaire     |
-| `49.12` | Verrouillage manuel        |
-| `49.13` | Limite d'entrée dépassée   |
-| `49.14` | Numéro de carte inconnu    |
-| `50.0`  | Porte verrouillée          |
-| `51.0`  | Alarme active              |
-| `52.0`  | Alarme activée             |
-| `53.0`  | Alarme désactivée          |
-| `54.0`  | Connexion au portail Web   |
-| `55.0`  | Déconnexion du portail Web |
-| `56.0`  | Carte non valide           |
-| `128.0` | Horaire inactif            |
-
-> La liste des codes n'est pas encore considérée comme exhaustive. Les significations sont issues des observations réalisées sur le système Atlas et peuvent nécessiter une validation sur différents firmwares.
-
----
-
-# 🧪 État actuel du projet
-
-### Endpoints
-
-| Fonction         | Endpoint           | État            |
-| ---------------- | ------------------ | --------------- |
-| Authentification | `/authenticate`    | ✅ Identifié     |
-| Utilisateurs     | `/credHolder/list` | ✅ Identifié     |
-| Événements       | `/evt/list`        | ✅ Identifié     |
-| Portes           | —                  | 🔎 À rechercher |
-| Contrôleurs      | —                  | 🔎 À rechercher |
-| Credentials      | —                  | 🔎 À rechercher |
-| Privilèges       | —                  | 🔎 À rechercher |
-| Alarmes          | —                  | 🔎 À rechercher |
-| Configuration    | —                  | 🔎 À rechercher |
-
-### Données
-
-* [x] Authentification
-* [x] Récupération des utilisateurs
-* [x] Récupération des badges
-* [x] Récupération des événements
-* [x] Filtrage des événements par date
-* [x] Première documentation des codes d'événements
-* [ ] Identifier l'identifiant unique des événements
-* [ ] Documenter l'ensemble des champs JSON
-* [ ] Identifier les endpoints supplémentaires
-* [ ] Synchronisation incrémentale robuste
-* [ ] Support de plusieurs modèles Atlas
-* [ ] Documentation des différences entre firmwares
-
----
-
-# 📁 Contenu du dépôt
+Les catégories actuellement utilisées dans les scripts sont :
 
 ```text
-ZKTECO_ATLAS/
-│
-├── README.md
-│
-├── ATLAS_BADGES_UTILISATEURS.php
-│   └── Extraction des utilisateurs et badges
-│
-├── ATLAS_EVENEMENTS_UTILISATEURS.php
-│   └── Extraction des événements
-│
-└── ATLAS_config.sql
-    └── Configuration / correspondance des codes d'événements
+[0, 1, 2, 3]
 ```
 
+
+# 📊 Codes et sous-codes d'événements
+
+Les codes suivants ont actuellement été identifiés :
+
+|    Code | Description                                     |
+| ------: | ----------------------------------------------- |
+|   `6.0` | Connexion via application                       |
+|   `7.0` | Déconnexion                                     |
+|   `8.0` | Connexion réussie                               |
+|  `48.0` | Accès autorisé (Carte)                          |
+|  `49.0` | Accès refusé (général)                          |
+|  `49.1` | Accès refusé (Carte expirée)                    |
+|  `49.2` | Accès refusé (Badge désactivé)                  |
+|  `49.3` | Accès refusé (Tentative usurpation)             |
+| `49.11` | Accès refusé (En dehors de l'horaire)           |
+| `49.12` | Accès refusé (Verrouillage manuel)              |
+| `49.13` | Accès refusé (Limite d'entrée dépassée)         |
+| `49.14` | Accès refusé (Numéro de carte inconnu)          |
+|  `50.0` | Accès refusé (Porte verrouillée)                |
+|  `51.0` | Accès refusé (Alarme active)                    |
+|  `52.0` | Alarme activée                                  |
+|  `53.0` | Alarme désactivée                               |
+|  `54.0` | Connexion (portail Web)                         |
+|  `55.0` | Déconnexion (portail Web)                       |
+|  `56.0` | Tentative d'accès (carte non valide)            |
+| `127.0` | Horaire inactif                                 |
+| `128.0` | Horaire inactif                                 |
+| `212.0` | Connexion infructueuse (mot de passe incorrect) |
+
+> Cette liste n'est pas considérée comme exhaustive. 
+
 ---
 
-# 🛠️ Utilisation
+# 🔄 Extraction des événements
 
-Les scripts PHP permettent actuellement d'interroger directement le contrôleur Atlas.
+Le projet contient actuellement deux approches.
 
-Configuration typique :
+## Extraction brute
+
+Le script d'extraction brute permet de récupérer les événements sous leur forme JSON originale.
+
+Cette approche est utilisée pour :
+
+* observer les champs retournés par l'API ;
+* identifier de nouveaux attributs ;
+* analyser les structures imbriquées ;
+* découvrir de nouveaux codes d'événements ;
+* documenter le fonctionnement de l'API.
+
+### Principe
 
 ```text
-Adresse IP Atlas
+Atlas
+  │
+  │ /evt/list
+  ▼
+JSON brut
+  │
+  ▼
+Analyse / Reverse Engineering
+```
+
+Il est recommandé de conserver cette extraction brute pendant toute la phase de documentation de l'API.
+
+---
+
+# ⚙️ Extraction automatique
+
+Le script CRON permet actuellement d'effectuer une extraction automatique des événements.
+
+Le fonctionnement actuel est :
+
+```text
+CRON
+ │
+ ├── Authentification
+ │
+ ├── Sélection de la veille
+ │
+ ├── /evt/list
+ │
+ ├── Récupération des événements
+ │
+ └── Insertion en base
+```
+
+La récupération actuelle utilise une période correspondant à la journée précédente :
+
+```text
+00:00 → 23:00
+```
+
+Cette méthode constitue une première version fonctionnelle de synchronisation.
+
+---
+
+# 🛡️ Gestion des doublons
+
+L'import actuel effectue une vérification avant insertion basée sur :
+
+```text
+ATLAS_dateh
+ATLAS_user
+ATLAS_Badge
+```
+
+L'objectif est d'éviter l'insertion répétée d'un même événement lors d'une nouvelle synchronisation.
+
+```text
+Événement Atlas
       │
       ▼
-┌──────────────────┐
-│ Script PHP       │
-│                  │
-│ /authenticate    │
-│ /credHolder/list │
-│ /evt/list        │
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────┐
-│ Base de données  │
-│ externe          │
-└──────────────────┘
+Recherche d'un événement similaire
+      │
+      ├── Existe → pas d'insertion
+      │
+      └── Absent → insertion
 ```
 
-> Les paramètres de connexion et identifiants doivent être configurés localement et ne doivent pas être stockés dans le dépôt.
+---
+
+# 🧩 Modèle de données actuellement exploité
+
+Les informations actuellement extraites des événements sont principalement :
+
+```text
+Date / heure
+   └── hwTime
+
+Événement
+   ├── evtCode
+   └── evtSubCode
+
+Utilisateur
+   ├── first
+   ├── last
+   └── idNum
+
+Credential
+   ├── credNum
+   └── name
+
+Périphérique
+   └── evtDevRef.name
+
+Contrôleur
+   └── evtControllerRef.name
+```
 
 ---
 
-# ⚠️ Sécurité
+# 🔬 Reverse Engineering
 
-Ce projet interagit directement avec un système de contrôle d'accès.
-
-Il est recommandé de :
-
-* ne jamais publier les identifiants Atlas ;
-* ne pas exposer l'interface Web de l'Atlas directement sur Internet ;
-* utiliser un réseau interne ou un VPN ;
-* protéger les identifiants utilisés par les scripts ;
-* utiliser HTTPS lorsque celui-ci est correctement configuré ;
-* éviter de désactiver la vérification TLS dans un environnement de production ;
-* limiter les droits du compte utilisé pour l'extraction lorsque cela est possible.
-
----
-
-# 🔬 Reverse engineering
-
-Ce projet a pour objectif de documenter une API non officiellement documentée.
-
-Les informations présentes dans ce dépôt sont issues de l'observation du comportement du système Atlas et peuvent évoluer selon :
-
-* le modèle du contrôleur ;
-* la version du firmware ;
-* la version de l'application Web ;
-* la configuration du système.
-
-Toute nouvelle information permettant d'identifier un endpoint, un champ JSON, un code événement ou un comportement particulier est la bienvenue.
-
----
-
-# 🚧 Prochaines étapes
-
-Les prochaines recherches devraient notamment porter sur :
+Le projet a pour but de documenter progressivement l'API utilisée par les contrôleurs Atlas.
+Les informations sont obtenues par observation des requêtes et réponses du système.
+L'objectif est notamment d'identifier :
 
 ```text
 API Atlas
@@ -396,7 +440,7 @@ API Atlas
 ├── Authentication
 │   └── /authenticate
 │
-├── Users
+├── Credential Holders
 │   └── /credHolder/list
 │
 ├── Events
@@ -421,14 +465,79 @@ API Atlas
     └── ?
 ```
 
-L'objectif final serait de disposer d'une documentation suffisamment complète pour permettre la création d'une véritable bibliothèque ou API permettant d'interagir avec les contrôleurs **ZKTeco Atlas**.
+Les endpoints marqués `?` n'ont pas encore été identifiés.
 
 ---
 
-## 📜 Licence
+# 🧪 État du projet
 
-Projet communautaire / expérimental.
+## Endpoints
 
-**ZKTeco** et **Atlas** sont des marques et produits de leurs propriétaires respectifs.
+| Fonction           | Endpoint           | État            |
+| ------------------ | ------------------ | --------------- |
+| Authentification   | `/authenticate`    | ✅ Identifié     |
+| Credential Holders | `/credHolder/list` | ✅ Identifié     |
+| Événements         | `/evt/list`        | ✅ Identifié     |
+| Portes             | —                  | 🔎 À rechercher |
+| Contrôleurs        | —                  | 🔎 À rechercher |
+| Credentials        | —                  | 🔎 À rechercher |
+| Privilèges         | —                  | 🔎 À rechercher |
+| Alarmes            | —                  | 🔎 À rechercher |
+| Configuration      | —                  | 🔎 À rechercher |
 
-Ce projet n'est pas affilié, approuvé ou officiellement supporté par ZKTeco.
+## Reverse engineering
+
+* [x] Authentification
+* [x] `sessionToken`
+* [x] Récupération des credential holders
+* [x] Récupération des credentials
+* [x] Récupération des événements
+* [x] Filtrage temporel des événements
+* [x] Filtrage par catégories
+* [x] Identification de plusieurs références d'objets
+* [x] Identification de plusieurs codes d'événements
+* [ ] Identifier l'identifiant unique d'un événement
+* [ ] Documenter tous les champs de `/evt/list`
+* [ ] Documenter tous les champs de `/credHolder/list`
+* [ ] Identifier les autres endpoints
+* [ ] Identifier la signification des catégories `0`, `1`, `2`, `3`
+* [ ] Tester plusieurs modèles Atlas
+* [ ] Tester plusieurs versions de firmware
+* [ ] Mettre en place une synchronisation incrémentale
+
+---
+
+# 📁 Contenu du dépôt
+
+```text
+ZKTECO_ATLAS/
+│
+├── README.md
+│
+├── ATLAS_BADGES_UTILISATEURS.php
+│   └── Extraction des utilisateurs / credentials
+│
+├── ATLAS_EVENEMENTS_UTILISATEURS.php
+│   └── Extraction des événements
+│
+└── ATLAS_config.sql
+    └── Configuration des codes d'événements
+```
+
+---
+
+
+
+# 📜 Avertissement
+
+Ce projet est **non officiel** et destiné à la recherche, à la documentation et à l'interopérabilité avec les contrôleurs ZKTeco Atlas.
+Il n'est pas affilié à ZKTeco et ne constitue pas une documentation officielle de leurs produits.
+
+Les structures et comportements documentés peuvent varier selon :
+
+* le modèle du contrôleur ;
+* la version du firmware ;
+* la version de l'application Web ;
+* la configuration du système.
+
+Toute contribution permettant d'identifier un nouvel endpoint, un nouveau champ JSON, un code d'événement ou un comportement particulier est la bienvenue.
