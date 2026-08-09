@@ -19,9 +19,21 @@ Arbre Analytique
  └── Events
        └── /evt/list
 
-Mécanisme de session : 
-POST/GET (?) /authenticate
-             ↓
-        sessionToken
-             ↓
-     Authorization
+Structure utilisateur : 
+$user['unid']
+$user['creds'][0]['name']
+$user['first']
+$user['last']
+$user['idNum']
+$user['privBindings']
+
+Structure évènements :
+evtCategoryRestriction.evtCategories
+hwTimeRestriction.beforeDate_year
+hwTimeRestriction.beforeDate_month
+hwTimeRestriction.beforeDate_day
+hwTimeRestriction.beforeDate_hour
+hwTimeRestriction.afterDate_year
+hwTimeRestriction.afterDate_month
+hwTimeRestriction.afterDate_day
+hwTimeRestriction.afterDate_hour
